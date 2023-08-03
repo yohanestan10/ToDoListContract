@@ -66,7 +66,6 @@ contract ToDoList_revised {
     function reassignTask(uint _taskId, address _newassignee) public onlyAssigner checkStatus(_taskId) {
         taskList[_taskId].taskAssignee = _newassignee;
         group[_taskId] = _newassignee;
-        
     }
 
     function viewTask() public view partofGroup() returns(taskDetail[] memory) {
