@@ -65,7 +65,7 @@ contract ToDoList_revised {
 
     function reassignTask(uint _taskId, address _newassignee) public onlyAssigner checkStatus(_taskId) {
         taskList[_taskId].taskAssignee = _newassignee;
-        delete group[_taskId];
+        group[_taskId] = _newassignee;
         
     }
 
