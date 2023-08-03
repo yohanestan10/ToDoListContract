@@ -1,79 +1,75 @@
 //SPDX-License-Identifier: MIT
 pragma solidity ^0.8.21;
 
-contract ToDoList {
+contract ToDoList_revised {
     address public assigner;
-    address[] public assignee;
     address[] public group;
-    uint public taskId;
-    bool public idStatus = false;
     
-
-    enum Status{
+    enum Status {
         Incomplete,
         Complete
     }
 
-    Status public status;
+    Status status;
 
-    struct TaskDetail{
+    struct taskDetail {
         string taskName;
         address taskAssigner;
-        address taskAssigned;
+        address taskAssignee;
         Status status;
     }
 
-    
-    mapping(uint256 => TaskDetail) public taskNumber;
-
-    
+    taskDetail[] taskList;
 
     constructor() {
         assigner = msg.sender;
-        for (uint i = 0; i < group.length; i++) {
-            if (msg.sender == group[i]) {
-                idStatus = true;
-                break;
-            }
-        }
+        group.push(msg.sender);
     }
-    
+
+    //Validate assigner
     modifier onlyAssigner{
         require(msg.sender == assigner, "Must be an assigner to call function");
         _;
     }
-    
-    modifier partofGroup{
-        require(idStatus == true, "Invalid address");
+
+    //Go through the array of 'group' to validate addresses
+    modifier partofGroup(){
+        for (uint i = 0; i < group.length; i++) {
+            if (msg.sender == group[i]) {
+                _;
+                break;
+            }
+        }
+    }
+
+    //Check whether a certain task is complete or not 
+    modifier checkStatus(uint _taskId){
+        require(taskList[_taskId].status == Status.Incomplete, "Task must be incomplete to call function");
         _;
     }
-        
-    function enterTask() external{
-        assignee.push(address(msg.sender));
-    }
 
-    function assignTask(string memory _taskName, uint _assignee) public onlyAssigner{
-        group.push(address(assignee[_assignee]));
-        taskId++;
-        taskNumber[taskId] = TaskDetail(
-             _taskName,
+    function assignTask(string memory _taskName, address _assignee) public onlyAssigner{
+        taskList.push(taskDetail(
+            _taskName,
              msg.sender,
-             assignee[_assignee],
+             _assignee,
              status = Status.Incomplete
-        );
+        ));
+        group.push(_assignee);
     }
 
-    function complete(uint _taskNo) public {
-        require(msg.sender == assignee[_taskNo], "Invalid address");
-        taskNumber[_taskNo].status = Status.Complete;
+    function completeTask(uint _taskId) public partofGroup() checkStatus(_taskId) {
+        require(msg.sender == taskList[_taskId].taskAssignee);
+        taskList[_taskId].status = Status.Complete;
     }
 
-    function viewTask(uint _taskNo) public partofGroup view returns(string memory, address, address, Status){
-        return (
-            taskNumber[_taskNo].taskName,
-            taskNumber[_taskNo].taskAssigner,
-            taskNumber[_taskNo].taskAssigned,
-            taskNumber[_taskNo].status
-        );
+    function reassignTask(uint _taskId, address _newassignee) public onlyAssigner checkStatus(_taskId) {
+        taskList[_taskId].taskAssignee = _newassignee;
+        delete group[_taskId];
+        
+    }
+
+    function viewTask() public view partofGroup() returns(taskDetail[] memory) {
+        return taskList;
     }
 }
