@@ -3,27 +3,98 @@ pragma solidity ^0.8.21;
 
 contract ToDoList_revised {
     address public assigner;
-    address[] public group;
-    
-    enum Status {
-        Incomplete,
-        Complete
+    mapping(address => bool) public addressToMembership;
+    ToDo[] toDos;
+
+    enum STATUS {
+        COMPLETE,
+        INCOMPLETE,
+        FAILED
     }
 
-    Status status;
+    STATUS status;
 
-    struct taskDetail {
+    struct ToDo {
+        uint32 taskId;
         string taskName;
+        uint32 taskDeadline;
         address taskAssigner;
         address taskAssignee;
-        Status status;
+        STATUS status;
     }
 
-    taskDetail[] taskList;
+    event TaskAdded(ToDo);
+    event LogCurrentUnixTime(uint unixTime);
 
     constructor() {
         assigner = msg.sender;
-        group.push(msg.sender);
+        addressToMembership[msg.sender] = true;
+    }
+
+    //Check whether a certain task is complete or not
+
+    function assignTask(string memory _taskName, uint32 _deadline, address _assignee) public onlyAssigner{
+    ToDo memory newTask  = ToDo(
+            uint32(toDos.length),
+            _taskName,
+            _deadline,
+             msg.sender,
+             _assignee,
+             status = STATUS.INCOMPLETE
+        );
+    
+    toDos.push(newTask);
+
+    addressToMembership[_assignee] = true;
+
+    emit TaskAdded(newTask);        
+    }
+
+    function reassignTask(uint32 _taskId, address _assignee) public onlyAssigner {
+        require(toDos[_taskId].status == STATUS.INCOMPLETE, "Task is completed, cannot reassign task.");
+        require(toDos[_taskId].taskAssignee != _assignee, "New assignee address is the same as original assignee.");
+        
+        toDos[_taskId].taskAssignee = _assignee;
+        addressToMembership[_assignee] = true;
+
+    }
+
+    function checkDeadlineValid(uint _deadline, uint currentUnixTime) public pure returns (bool){
+        if (currentUnixTime < _deadline) {
+            return true; 
+        }
+        return false;
+    }
+
+    function refreshTask() external onlyAssigner {
+        emit LogCurrentUnixTime(block.timestamp);
+        for (uint i = 0; i < toDos.length; i++){
+            //only incomplete tasks' status can be updated to failed if passed deadline
+            if (toDos[i].status == STATUS.INCOMPLETE && !checkDeadlineValid(toDos[i].taskDeadline, block.timestamp)){
+                toDos[i].status = STATUS.FAILED;
+            }
+        }
+    }
+
+    function completeTask(uint32 _taskId) external onlyMember {
+        require(toDos[_taskId].taskAssignee == msg.sender, "Only assignee can complete task");
+        require(toDos[_taskId].status == STATUS.INCOMPLETE, "Task status is complete or passed the deadline.");
+
+        bool isDeadlineValid = checkDeadlineValid(toDos[_taskId].taskDeadline, block.timestamp);
+
+        if (!isDeadlineValid) {
+            toDos[_taskId].status = STATUS.FAILED;
+        }
+        require(isDeadlineValid, "Task has passed the deadline");
+        toDos[_taskId].status = STATUS.COMPLETE;
+    }
+
+    function removeMembership(address _member) external onlyAssigner{
+        addressToMembership[_member] = false;
+    }
+
+    function viewAllTasks() public view onlyMember returns(ToDo[] memory) {
+        return toDos;
     }
 
     //Validate assigner
@@ -33,42 +104,9 @@ contract ToDoList_revised {
     }
 
     //Go through the array of 'group' to validate addresses
-    modifier partofGroup(){
-        for (uint i = 0; i < group.length; i++) {
-            if (msg.sender == group[i]) {
-                _;
-                break;
-            }
-        }
-    }
-
-    //Check whether a certain task is complete or not 
-    modifier checkStatus(uint _taskId){
-        require(taskList[_taskId].status == Status.Incomplete, "Task must be incomplete to call function");
+    modifier onlyMember(){
+        require(addressToMembership[msg.sender], "Must be a member to call function");
         _;
     }
 
-    function assignTask(string memory _taskName, address _assignee) public onlyAssigner{
-        taskList.push(taskDetail(
-            _taskName,
-             msg.sender,
-             _assignee,
-             status = Status.Incomplete
-        ));
-        group.push(_assignee);
-    }
-
-    function completeTask(uint _taskId) public partofGroup() checkStatus(_taskId) {
-        require(msg.sender == taskList[_taskId].taskAssignee);
-        taskList[_taskId].status = Status.Complete;
-    }
-
-    function reassignTask(uint _taskId, address _newassignee) public onlyAssigner checkStatus(_taskId) {
-        taskList[_taskId].taskAssignee = _newassignee;
-        group[_taskId] = _newassignee;
-    }
-
-    function viewTask() public view partofGroup() returns(taskDetail[] memory) {
-        return taskList;
-    }
 }
